@@ -1,9 +1,6 @@
 
 
 // Server command specifically made
-
-use std::task::Context;
-
 use serenity::all::{CacheHttp, CommandInteraction, CreateCommand};
 use serenity::builder::{CreateInteractionResponse, CreateInteractionResponseMessage};
 

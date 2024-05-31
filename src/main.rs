@@ -1,8 +1,9 @@
-use std::env;
+use anyhow::Context as _;
 use serenity::all::{Command, Guild, GuildId, Interaction, Ready};
 use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::prelude::*;
+use shuttle_runtime::SecretStore;
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{Error, MySqlPool};
 
@@ -26,6 +27,7 @@ trait SQLHandlers {
     async fn global_add_marshmellow_count(&self, guild_id: &GuildId) -> Result<u64, Error>;
     async fn add_server_row(&self, guild_id: &GuildId) -> Result<(), Error>;
     async fn get_global_marshmellow_posted_count(&self) -> Result<f64, Error>;
+    async fn check_bytes_table(&self) -> Result<(), Error>;
 
 }
 
@@ -95,7 +97,29 @@ impl SQLHandlers for Handler {
         println!("Current global count: {}", handle_count);
 
         Ok(handle_count)
-    } 
+    }
+
+    async fn check_bytes_table(&self) -> Result<(), Error> {
+
+    let table_exists: (i32,) = sqlx::query_as(r#"
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_CATALOG = 'defaultdb' AND TABLE_NAME = 'global_servers_data'
+        "#)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if table_exists.0 == 0 {
+            // The table does not exist, so create it
+            sqlx::query(r#"
+            CREATE TABLE global_servers_data(guild_id CHAR(255), marshmellow_counts Long)
+            "#)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
 
 }
 
@@ -112,7 +136,7 @@ impl EventHandler for Handler {
             println!("I created the following global slash command: {guild_command:#?}");
         }
 
-
+        self.check_bytes_table().await; 
 
         for guild in _ready.guilds.iter() {
            self.add_server_row(&guild.id).await;
@@ -174,8 +198,10 @@ impl EventHandler for Handler {
     }
 }
 
-#[tokio::main]
-async fn main() {
+#[shuttle_runtime::main]
+async fn main(
+    #[shuttle_runtime::Secrets] secrets: SecretStore,
+) -> shuttle_serenity::ShuttleSerenity {
     // Login with a bot token from the environment
     // To use: export DISCORD_TOKEN="{token_content}" in shell
 
@@ -183,8 +209,13 @@ async fn main() {
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
-    let token = env::var("DISCORD_TOKEN").unwrap();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let token = secrets
+        .get("DISCORD_TOKEN")
+        .context("'DISCORD_TOKEN' was not found")?;
+
+    let database_url = secrets
+        .get("DATABASE_URL")
+        .context("'Database url' was not found")?;
     let pool = MySqlPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -200,5 +231,7 @@ async fn main() {
     if let Err(why) = client.start().await {
         println!("Client error: {why:?}");
     }
+
+    Ok(client.into())
 }
 

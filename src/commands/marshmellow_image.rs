@@ -1,14 +1,8 @@
 
 // Server command specifically made
 
-use std::task::Context;
-
-use serenity::all::{CacheHttp, CommandInteraction, CreateCommand, CreateEmbed, CreateMessage, MessageBuilder, ResolvedOption};
-use serenity::async_trait;
+use serenity::all::{CacheHttp, CommandInteraction, CreateCommand, CreateEmbed};
 use serenity::builder::{CreateInteractionResponse, CreateInteractionResponseMessage};
-use serenity::model::application::{Command, Interaction};
-use serenity::model::gateway::Ready;
-use serenity::model::id::GuildId;
 
 #[derive(Debug)]
 struct DefaultContent<'a> {
